@@ -1,0 +1,67 @@
+//@version=5
+// Trend-filtered mean reversion — honest TradingView strategy.
+// Mirrors the Python toolkit. Designed to NOT repaint:
+//   - process_orders_on_close + calc_on_every_tick=false
+//   - entries use ta.crossover/crossunder on confirmed bars
+//   - commission and slippage are ON by default (turn them off and any
+//     mediocre system looks profitable — that gap is the cost of trading)
+//
+// This is a research / paper-trading tool. It is NOT a guaranteed money-maker.
+// Validate on years of data and forward-test before risking real capital.
+
+strategy("Mean Reversion + Trend Filter (honest)",
+     overlay              = true,
+     initial_capital      = 10000,
+     calc_on_every_tick   = false,
+     process_orders_on_close = true,
+     commission_type      = strategy.commission.percent,
+     commission_value     = 0.05,
+     slippage             = 2,
+     default_qty_type     = strategy.percent_of_equity,
+     default_qty_value    = 100)
+
+// ---- Inputs ----
+emaLen    = input.int(200,  "Trend EMA length",  minval = 10)
+rsiLen    = input.int(14,   "RSI length",        minval = 2)
+osLevel   = input.int(30,   "Oversold (buy)",    minval = 5,  maxval = 50)
+obLevel   = input.int(70,   "Overbought (sell)", minval = 50, maxval = 95)
+exitLvl   = input.int(50,   "Exit RSI midline")
+atrLen    = input.int(14,   "ATR length",        minval = 2)
+stopMult  = input.float(2.5,"Stop = ATR x",      minval = 0.5, step = 0.1)
+riskPct   = input.float(1.0,"Risk % per trade",  minval = 0.1, step = 0.1)
+allowLong = input.bool(true, "Allow longs")
+allowShort= input.bool(true, "Allow shorts")
+
+// ---- Indicators ----
+emaVal = ta.ema(close, emaLen)
+rsiVal = ta.rsi(close, rsiLen)
+atrVal = ta.atr(atrLen)
+
+// ---- Regime filter + entries ----
+up = close > emaVal
+dn = close < emaVal
+longEntry  = allowLong  and up and ta.crossover(rsiVal,  osLevel)
+shortEntry = allowShort and dn and ta.crossunder(rsiVal, obLevel)
+
+// ---- Risk-based position size: a stop-out loses ~riskPct of equity ----
+stopDist = atrVal * stopMult
+riskAmt  = strategy.equity * riskPct / 100.0
+qty      = stopDist > 0 ? riskAmt / stopDist : na
+
+if longEntry and strategy.position_size == 0 and not na(qty)
+    strategy.entry("L", strategy.long, qty = qty)
+    strategy.exit("L-stop", from_entry = "L", stop = close - stopDist)
+
+if shortEntry and strategy.position_size == 0 and not na(qty)
+    strategy.entry("S", strategy.short, qty = qty)
+    strategy.exit("S-stop", from_entry = "S", stop = close + stopDist)
+
+// ---- Mean-reversion take profit: RSI reverts through the midline ----
+if strategy.position_size > 0 and ta.crossover(rsiVal, exitLvl)
+    strategy.close("L", comment = "revert")
+if strategy.position_size < 0 and ta.crossunder(rsiVal, exitLvl)
+    strategy.close("S", comment = "revert")
+
+// ---- Plots ----
+plot(emaVal, "Trend EMA", color = color.orange, linewidth = 2)
+bgcolor(up ? color.new(color.green, 92) : color.new(color.red, 92))
