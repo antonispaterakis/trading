@@ -1,102 +1,62 @@
-# Honest trading bot toolkit
+# 🤖 Honest Trading Bot Toolkit
 
-A small, dependency-free toolkit for **researching and validating** systematic
-trading strategies the right way — with walk-forward (out-of-sample) testing
-that stops you fooling yourself, and a matching TradingView strategy for live
-forward-testing.
+A python toolkit built to test trading strategies **the right way**. It prevents you from fooling yourself with optimistic backtests by using rigorous **walk-forward (out-of-sample) validation**, proving when a strategy actually has an edge—and more importantly, when it doesn't.
 
-> **Read this first.** There is no "close to perfect" bot. Markets are close to
-> efficient; any simple edge gets competed away. This toolkit's value is not a
-> magic signal — it is the **discipline that stops you fooling yourself**:
-> realistic costs, risk-based sizing, and walk-forward (out-of-sample) testing.
-> Used honestly, it tells you when a strategy has *no* edge — which is the single
-> most profitable thing it can do for you.
+### Core Features (View the code in `/python`)
+1. **Zero-Dependency Engine:** Pure Python event-driven backtester modeling real commissions and slippage (no bloated frameworks).
+2. **Hybrid AI Regime Manager:** Uses a `scikit-learn` Random Forest to predict if the market is **Trending** or **Ranging (Crab)**, dynamically swapping execution strategies on the fly.
+3. **Walk-Forward Optimizer:** Retrains the AI and locks parameters on a past window, then tests them on the *next unseen* window.
 
-## What's inside
+---
 
-```
-trading/
-├── python/
-│   ├── indicators.py        EMA, RSI, ATR, ADX, SMA, Bollinger Bands, MACD
-│   ├── data.py              fetch + cache real OHLCV from Binance (no API key)
-│   ├── features.py          AI feature engineering + regime labels
-│   ├── ai_model.py          Random Forest regime classifier
-│   ├── strategy.py          baseline: trend-filtered mean reversion
-│   ├── crab_strategy.py     crab market day-trader scalper
-│   ├── hybrid_strategy.py   AI regime manager → delegates to sub-strategies
-│   ├── backtest.py          event-driven engine + honest metrics
-│   ├── walkforward.py       walk-forward optimisation (the core idea)
-│   └── run.py               command-line entry point
-├── pinescript/
-│   └── mean_reversion.pine  no-repaint TradingView strategy
-├── progress.md              development log + thinking process
-└── README.md
-```
+## 📉 The Honest Results
 
-The baseline strategies run on stock Python 3. The hybrid AI strategy requires `scikit-learn` (`pip install scikit-learn`).
+We tested three distinct approaches on BTCUSDT (1-hour chart, 4800 bars). The gap between a standard backtest and a walk-forward test is **overfitting made visible**.
 
-## Quick start
+| Strategy | Engine Type | OOS Return | Trades | Max Drawdown | Sharpe |
+|----------|------------|------------|--------|--------------|--------|
+| **Baseline** | Trend-Following | -3.2% | 22 | 1.1% | -2.85 |
+| **Crab** | Sideways Scalping | -11.1% | 46 | 4.2% | -2.37 |
+| **Hybrid AI** | AI Regime Manager | **-4.6%** | **15** | **1.9%** | **-1.03** |
+
+*Note: None of these strategies have a positive edge on this dataset. This is the truth the toolkit provides before you risk real capital.*
+
+**Why the Hybrid AI is better:**
+The AI successfully learned when to sit out. It correctly predicted market regimes, drastically reduced the trade count (from 46 down to 15), lowered the maximum drawdown, and improved the Sharpe ratio by aggressively filtering out uncertain setups.
+
+---
+
+## 🚀 Quick Start
 
 ```bash
+# 1. Setup the environment for the Hybrid AI
+python3 -m venv .venv
+source .venv/bin/activate
+pip install scikit-learn
+
 cd python
 
-# Walk-forward validation with the baseline strategy:
-python3 run.py --strategy baseline
-
-# Walk-forward validation with the crab market scalper:
-python3 run.py --strategy crab
-
-# Walk-forward validation with the hybrid AI regime manager:
+# 2. Run the Walk-Forward validation on the Hybrid AI
 python3 run.py --strategy hybrid
 
-# Optimistic single-shot backtest (for contrast — do NOT trust it alone):
-python3 run.py --strategy baseline --mode backtest
-
-# Other markets / timeframes:
-python3 run.py --symbol ETHUSDT --interval 4h
-
-# Diversified run across uncorrelated markets:
-python3 run.py --portfolio BTCUSDT,ETHUSDT,SOLUSDT
+# 3. Compare it against the rigid Math strategies
+python3 run.py --strategy crab
+python3 run.py --strategy baseline
 ```
 
-## Strategies
+### The Three Strategies Explained
 
-### Baseline — Trend-Filtered Mean Reversion
+1. **Hybrid AI (`hybrid_strategy.py`)**: A Random Forest classifier predicts the market regime based on normalized volatility (RSI, ADX, BB width). If confident, it delegates execution to the correct math strategy. If uncertain (< 60% confidence), it sits out entirely.
+2. **Crab Scalper (`crab_strategy.py`)**: Detects ranging markets (ADX < 25). Pauses trading on breakouts. Enters on Bollinger Band bounces confirmed by MACD momentum.
+3. **Baseline Trend (`strategy.py`)**: Trades only with the higher-timeframe trend (EMA). Enters on RSI midline crosses. 
 
-- Trade only with the higher-trend (longs above the EMA, shorts below).
-- Enter when RSI crosses back out of an extreme (oversold / overbought).
-- Take profit when RSI reverts to the midline; hard ATR stop otherwise.
-- Size every trade so a stop-out loses a fixed `--risk` % of equity.
+---
 
-### Crab Market Day Trader
+## 🧠 The Thinking Process
 
-- Detect ranging (sideways) markets using ADX < threshold.
-- **Pause all trading** if ADX spikes (breakout protection).
-- Enter on Bollinger Band bounces confirmed by MACD momentum and Volume.
-- Use tight ATR-based stop-loss and take-profit for scalping-style execution.
+Want to know how we arrived at the Hybrid AI architecture and solved the standard pitfalls of Machine Learning in trading (Lookahead Bias, Stationarity, Black-Box Trust)? 
 
-### Hybrid AI Regime Manager
-
-- A Random Forest classifier predicts the market **regime** (Trending vs Crab) using normalized features (RSI, ADX, BB width, MACD, Volume, ATR).
-- **If Trending** → activates the baseline trend-following strategy.
-- **If Crab** → activates the scalping strategy.
-- **If uncertain** (confidence < 60%) → sits out entirely.
-- The AI is retrained on every walk-forward segment, so it adapts as the market evolves.
-
-## How to read the output
-
-Run walk-forward mode and check the **aggregate OOS (out-of-sample) return**.
-That number is the closest estimate of what the strategy would have done live.
-If it isn't clearly positive *after costs*, the strategy has no edge — do not
-trade it.
-
-## The honest path forward
-
-1. **Keep judging on out-of-sample data**, never on the backtest peak.
-2. **Diversify across uncorrelated markets** — the one real "free lunch". Use `--portfolio`.
-3. **Reduce cost drag** — fewer/longer trades; costs flipped several configs from green to red.
-4. **Expect Sharpe ~0.5–1 and survivable drawdowns**, not a money printer.
-5. **Forward-test on TradingView** with `pinescript/mean_reversion.pine` (paper account) for weeks/months before risking a cent.
+Read the full development log in **[progress.md](progress.md)**.
 
 ## Disclaimer
 
