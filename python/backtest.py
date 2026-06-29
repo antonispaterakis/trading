@@ -9,13 +9,16 @@ Models the things that quietly kill real strategies:
 run() can be restricted to an index window [lo, hi) so the same causally-computed
 signals can be evaluated on train vs test ranges without recomputation.
 """
+
 from __future__ import annotations
 import math
 import statistics
 from typing import Dict, Optional
 
 
-def run(data: Dict, signals: Dict, params: Dict, lo: int = 1, hi: Optional[int] = None) -> Dict:
+def run(
+    data: Dict, signals: Dict, params: Dict, lo: int = 1, hi: Optional[int] = None
+) -> Dict:
     close, high, low = data["close"], data["high"], data["low"]
     n = len(close)
     hi = n if hi is None else hi
@@ -42,18 +45,29 @@ def run(data: Dict, signals: Dict, params: Dict, lo: int = 1, hi: Optional[int] 
             elif pos["dir"] == -1 and high[i] >= pos["stop"]:
                 exitp, stopped = pos["stop"], True
             elif "tp" in pos and pos["dir"] == 1 and high[i] >= pos["tp"]:
-                exitp, stopped = pos["tp"], False # Win!
+                exitp, stopped = pos["tp"], False  # Win!
             elif "tp" in pos and pos["dir"] == -1 and low[i] <= pos["tp"]:
-                exitp, stopped = pos["tp"], False # Win!
+                exitp, stopped = pos["tp"], False  # Win!
             elif exit_[i]:
                 exitp = price
             if exitp is not None:
                 eff = exitp * (1 - slip * pos["dir"])
-                pnl = (eff - pos["entry_eff"]) * pos["qty"] * pos["dir"] - eff * pos["qty"] * comm
+                pnl = (eff - pos["entry_eff"]) * pos["qty"] * pos["dir"] - eff * pos[
+                    "qty"
+                ] * comm
                 equity += pnl
-                trades.append({"dir": pos["dir"], "entry": pos["entry"], "stop": pos["stop"],
-                               "i_in": pos["i_in"], "i_out": i, "exit": exitp,
-                               "pnl": pnl, "stopped": stopped})
+                trades.append(
+                    {
+                        "dir": pos["dir"],
+                        "entry": pos["entry"],
+                        "stop": pos["stop"],
+                        "i_in": pos["i_in"],
+                        "i_out": i,
+                        "exit": exitp,
+                        "pnl": pnl,
+                        "stopped": stopped,
+                    }
+                )
                 pos = None
         # ---- open a new position ----
         if pos is None and entry[i] != 0 and stop_dist[i]:
@@ -62,8 +76,14 @@ def run(data: Dict, signals: Dict, params: Dict, lo: int = 1, hi: Optional[int] 
             qty = (equity * risk_pct / 100.0) / sd
             entry_eff = price * (1 + slip * d)
             equity -= entry_eff * qty * comm  # entry commission
-            pos = {"dir": d, "entry": price, "entry_eff": entry_eff, "qty": qty,
-                   "stop": price - sd * d, "i_in": i}
+            pos = {
+                "dir": d,
+                "entry": price,
+                "entry_eff": entry_eff,
+                "qty": qty,
+                "stop": price - sd * d,
+                "i_in": i,
+            }
             if tp_dist[i]:
                 pos["tp"] = price + tp_dist[i] * d
         curve.append(equity)
@@ -89,9 +109,13 @@ def metrics(result: Dict, bars_per_year: float) -> Dict:
         if peak > 0:
             mdd = max(mdd, (peak - v) / peak)
 
-    rets = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
+    rets = [
+        curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0
+    ]
     if len(rets) > 2 and statistics.pstdev(rets) > 0:
-        sharpe = statistics.mean(rets) / statistics.pstdev(rets) * math.sqrt(bars_per_year)
+        sharpe = (
+            statistics.mean(rets) / statistics.pstdev(rets) * math.sqrt(bars_per_year)
+        )
     else:
         sharpe = 0.0
 

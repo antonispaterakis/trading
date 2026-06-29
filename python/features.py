@@ -7,6 +7,7 @@ non-stationary raw prices leaking in.
 The target label is based on *realized volatility*: did the market actually
 move hard (Trending) or stay flat (Crab) over the next ``horizon`` bars?
 """
+
 from __future__ import annotations
 import math
 import statistics
@@ -18,10 +19,10 @@ from indicators import rsi, adx, atr, macd, bollinger_bands, sma
 FEATURE_NAMES = [
     "rsi",
     "adx",
-    "macd_hist_norm",   # MACD histogram / ATR  (removes price-scale)
-    "bb_width_pct",     # (upper - lower) / basis  (% bandwidth)
-    "volume_ratio",     # volume / volume_ma
-    "atr_pct",          # ATR / close  (normalised volatility)
+    "macd_hist_norm",  # MACD histogram / ATR  (removes price-scale)
+    "bb_width_pct",  # (upper - lower) / basis  (% bandwidth)
+    "volume_ratio",  # volume / volume_ma
+    "atr_pct",  # ATR / close  (normalised volatility)
 ]
 
 
@@ -39,11 +40,12 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
     r = rsi(close, p.get("rsi_len", 14))
     a = adx(high, low, close, p.get("adx_len", 14))
     atr_vals = atr(high, low, close, p.get("atr_len", 14))
-    macd_line, sig_line, hist = macd(close, p.get("macd_fast", 12),
-                                     p.get("macd_slow", 26),
-                                     p.get("macd_sig", 9))
-    bb_basis, bb_upper, bb_lower = bollinger_bands(close, p.get("bb_len", 20),
-                                                   p.get("bb_mult", 2.0))
+    macd_line, sig_line, hist = macd(
+        close, p.get("macd_fast", 12), p.get("macd_slow", 26), p.get("macd_sig", 9)
+    )
+    bb_basis, bb_upper, bb_lower = bollinger_bands(
+        close, p.get("bb_len", 20), p.get("bb_mult", 2.0)
+    )
     if volume:
         vma = sma(volume, p.get("vma_len", 20))
     else:
@@ -56,9 +58,15 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
 
     for i in range(n):
         # Check all indicators have warmed up
-        if (r[i] is None or a[i] is None or atr_vals[i] is None or
-                hist[i] is None or bb_basis[i] is None or
-                bb_upper[i] is None or bb_lower[i] is None):
+        if (
+            r[i] is None
+            or a[i] is None
+            or atr_vals[i] is None
+            or hist[i] is None
+            or bb_basis[i] is None
+            or bb_upper[i] is None
+            or bb_lower[i] is None
+        ):
             rows.append([0.0] * len(FEATURE_NAMES))
             valid.append(False)
             continue
@@ -73,8 +81,11 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
         feat_macd = hist[i] / atr_vals[i] if atr_vals[i] > 0 else 0.0
 
         # Bollinger Band width as percentage of basis
-        feat_bb = ((bb_upper[i] - bb_lower[i]) / bb_basis[i] * 100.0
-                   if bb_basis[i] > 0 else 0.0)
+        feat_bb = (
+            (bb_upper[i] - bb_lower[i]) / bb_basis[i] * 100.0
+            if bb_basis[i] > 0
+            else 0.0
+        )
 
         # Volume / Volume MA ratio
         if vma[i] is not None and vma[i] > 0 and volume[i] is not None:
@@ -83,11 +94,9 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
             feat_vol = 1.0  # neutral when no volume data
 
         # ATR as percentage of close (normalised volatility)
-        feat_atr_pct = (atr_vals[i] / close[i] * 100.0
-                        if close[i] > 0 else 0.0)
+        feat_atr_pct = atr_vals[i] / close[i] * 100.0 if close[i] > 0 else 0.0
 
-        rows.append([feat_rsi, feat_adx, feat_macd, feat_bb, feat_vol,
-                     feat_atr_pct])
+        rows.append([feat_rsi, feat_adx, feat_macd, feat_bb, feat_vol, feat_atr_pct])
         valid.append(True)
 
     return rows, valid
@@ -120,7 +129,7 @@ def compute_labels(data: Dict, horizon: int = 20) -> Tuple[List[int], List[bool]
     # Compute realised volatility for each bar's future window
     realised_vols: List[Optional[float]] = [None] * n
     for i in range(n - horizon):
-        window = returns[i + 1: i + 1 + horizon]
+        window = returns[i + 1 : i + 1 + horizon]
         if len(window) >= 2:
             realised_vols[i] = statistics.pstdev(window)
 

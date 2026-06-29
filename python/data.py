@@ -3,6 +3,7 @@
 Data is paginated backwards in 1000-candle pages and cached on disk for one hour
 so repeated runs are fast and don't hammer the API.
 """
+
 from __future__ import annotations
 import json
 import os
@@ -19,17 +20,28 @@ def _get(url: str):
         return json.load(r)
 
 
-def fetch_klines(symbol: str = "BTCUSDT", interval: str = "1h", bars: int = 4800, use_cache: bool = True) -> dict:
+def fetch_klines(
+    symbol: str = "BTCUSDT",
+    interval: str = "1h",
+    bars: int = 4800,
+    use_cache: bool = True,
+) -> dict:
     os.makedirs(CACHE_DIR, exist_ok=True)
     cache_path = os.path.join(CACHE_DIR, f"{symbol}_{interval}_{bars}.json")
-    if use_cache and os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path)) < CACHE_TTL:
+    if (
+        use_cache
+        and os.path.exists(cache_path)
+        and (time.time() - os.path.getmtime(cache_path)) < CACHE_TTL
+    ):
         return json.load(open(cache_path))
 
     collected: dict[int, list] = {}
     end = int(time.time() * 1000)
     while len(collected) < bars:
-        url = (f"https://api.binance.com/api/v3/klines?symbol={symbol}"
-               f"&interval={interval}&limit=1000&endTime={end}")
+        url = (
+            f"https://api.binance.com/api/v3/klines?symbol={symbol}"
+            f"&interval={interval}&limit=1000&endTime={end}"
+        )
         data = _get(url)
         if not data:
             break

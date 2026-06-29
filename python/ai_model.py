@@ -4,11 +4,13 @@ Trains a lightweight classifier to predict whether the upcoming market
 regime is Trending (1) or Crab/Ranging (0).  Designed to be retrained
 on every walk-forward segment so it adapts to evolving markets.
 """
+
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 try:
     from sklearn.ensemble import RandomForestClassifier
+
     HAS_SKLEARN = True
 except ImportError:
     HAS_SKLEARN = False
@@ -22,10 +24,13 @@ def _check_sklearn():
         )
 
 
-def train_model(features: List[List[float]], labels: List[int],
-                valid_mask: List[bool],
-                max_depth: int = 6,
-                n_estimators: int = 200) -> object:
+def train_model(
+    features: List[List[float]],
+    labels: List[int],
+    valid_mask: List[bool],
+    max_depth: int = 6,
+    n_estimators: int = 200,
+) -> object:
     """Train a Random Forest on the valid subset of features/labels.
 
     Returns the fitted sklearn model.
@@ -33,7 +38,7 @@ def train_model(features: List[List[float]], labels: List[int],
     _check_sklearn()
 
     X = [f for f, v in zip(features, valid_mask) if v]
-    y = [l for l, v in zip(labels, valid_mask) if v]
+    y = [lbl for lbl, v in zip(labels, valid_mask) if v]
 
     if len(X) < 30:
         return None  # Not enough training samples
@@ -82,8 +87,7 @@ def log_importance(model, feature_names: List[str]) -> str:
         return "  (no model trained)"
 
     importances = model.feature_importances_
-    pairs = sorted(zip(feature_names, importances),
-                   key=lambda x: x[1], reverse=True)
+    pairs = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
     lines = []
     for name, imp in pairs:
         bar = "█" * int(imp * 40)

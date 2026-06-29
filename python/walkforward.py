@@ -10,12 +10,12 @@ The stitched TEST results are an out-of-sample estimate of what the strategy
 would actually have done live. If walk-forward returns are near zero or
 negative while the single-shot backtest looks great, the edge was an illusion.
 """
+
 from __future__ import annotations
 import itertools
 from typing import Dict, List, Optional, Tuple
 
 from backtest import run, metrics
-from strategy import generate_signals
 
 # Kept deliberately small. Fewer knobs -> less overfitting.
 PARAM_GRID = {
@@ -26,9 +26,17 @@ PARAM_GRID = {
 }
 
 
-def optimize(data: Dict, base: Dict, lo: int, hi: int, bars_per_year: float,
-             generate_signals_fn, param_grid: Dict,
-             objective: str = "sharpe", min_trades: int = 10) -> Optional[Tuple[float, Dict, Dict]]:
+def optimize(
+    data: Dict,
+    base: Dict,
+    lo: int,
+    hi: int,
+    bars_per_year: float,
+    generate_signals_fn,
+    param_grid: Dict,
+    objective: str = "sharpe",
+    min_trades: int = 10,
+) -> Optional[Tuple[float, Dict, Dict]]:
     best: Optional[Tuple[float, Dict, Dict]] = None
     keys = list(param_grid)
     for combo in itertools.product(*[param_grid[k] for k in keys]):
@@ -48,32 +56,58 @@ def optimize(data: Dict, base: Dict, lo: int, hi: int, bars_per_year: float,
     return best
 
 
-def walk_forward(data: Dict, base: Dict, generate_signals_fn, param_grid: Dict,
-                 train: int = 1500, test: int = 500,
-                 bars_per_year: float = 8760, objective: str = "sharpe") -> List[Dict]:
+def walk_forward(
+    data: Dict,
+    base: Dict,
+    generate_signals_fn,
+    param_grid: Dict,
+    train: int = 1500,
+    test: int = 500,
+    bars_per_year: float = 8760,
+    objective: str = "sharpe",
+) -> List[Dict]:
     n = len(data["close"])
     segments: List[Dict] = []
     start = 0
     while start + train + test <= n:
         tr_lo, tr_hi = start, start + train
         te_lo, te_hi = start + train, start + train + test
-        best = optimize(data, base, tr_lo, tr_hi, bars_per_year, generate_signals_fn, param_grid, objective)
+        best = optimize(
+            data,
+            base,
+            tr_lo,
+            tr_hi,
+            bars_per_year,
+            generate_signals_fn,
+            param_grid,
+            objective,
+        )
         if best is not None:
             _, bp, _ = best
             sig = generate_signals_fn(data, bp)
             res = run(data, sig, bp, te_lo, te_hi)
             m = metrics(res, bars_per_year)
-            segments.append({"params": bp, "train_range": (tr_lo, tr_hi),
-                             "test_range": (te_lo, te_hi), "metrics": m})
+            segments.append(
+                {
+                    "params": bp,
+                    "train_range": (tr_lo, tr_hi),
+                    "test_range": (te_lo, te_hi),
+                    "metrics": m,
+                }
+            )
         start += test
     return segments
 
 
-def walk_forward_hybrid(data: Dict, base: Dict,
-                        train: int = 1500, test: int = 500,
-                        bars_per_year: float = 8760,
-                        horizon: int = 20,
-                        min_confidence: float = 0.60) -> List[Dict]:
+def walk_forward_hybrid(
+    data: Dict,
+    base: Dict,
+    train: int = 1500,
+    test: int = 500,
+    bars_per_year: float = 8760,
+    horizon: int = 20,
+    min_confidence: float = 0.60,
+) -> List[Dict]:
     """Walk-forward loop for the hybrid AI strategy.
 
     Instead of optimising static parameters, each segment:
@@ -103,8 +137,9 @@ def walk_forward_hybrid(data: Dict, base: Dict,
         # Labels near the end of the train window bleed into test → truncate
         train_mask = []
         for i in range(tr_lo, tr_hi):
-            valid = (feat_valid[i] and label_valid[i] and
-                     i + horizon < tr_hi)  # prevent label leakage
+            valid = (
+                feat_valid[i] and label_valid[i] and i + horizon < tr_hi
+            )  # prevent label leakage
             train_mask.append(valid)
 
         train_features = feat_rows[tr_lo:tr_hi]
@@ -126,24 +161,32 @@ def walk_forward_hybrid(data: Dict, base: Dict,
         m = metrics(res, bars_per_year)
 
         # Count regime distribution in test window
-        n_crab = sum(1 for i in range(te_lo, te_hi)
-                     if predictions[i][0] == 0 and predictions[i][1] >= min_confidence)
-        n_trend = sum(1 for i in range(te_lo, te_hi)
-                      if predictions[i][0] == 1 and predictions[i][1] >= min_confidence)
-        n_skip = sum(1 for i in range(te_lo, te_hi)
-                     if predictions[i][1] < min_confidence)
+        n_crab = sum(
+            1
+            for i in range(te_lo, te_hi)
+            if predictions[i][0] == 0 and predictions[i][1] >= min_confidence
+        )
+        n_trend = sum(
+            1
+            for i in range(te_lo, te_hi)
+            if predictions[i][0] == 1 and predictions[i][1] >= min_confidence
+        )
+        n_skip = sum(
+            1 for i in range(te_lo, te_hi) if predictions[i][1] < min_confidence
+        )
 
         importance_str = log_importance(model, FEATURE_NAMES)
 
-        segments.append({
-            "params": p,
-            "train_range": (tr_lo, tr_hi),
-            "test_range": (te_lo, te_hi),
-            "metrics": m,
-            "regime_dist": {"crab": n_crab, "trend": n_trend, "skipped": n_skip},
-            "feature_importance": importance_str,
-        })
+        segments.append(
+            {
+                "params": p,
+                "train_range": (tr_lo, tr_hi),
+                "test_range": (te_lo, te_hi),
+                "metrics": m,
+                "regime_dist": {"crab": n_crab, "trend": n_trend, "skipped": n_skip},
+                "feature_importance": importance_str,
+            }
+        )
         start += test
 
     return segments
-

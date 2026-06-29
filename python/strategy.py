@@ -9,19 +9,20 @@ generate_signals returns, for every bar:
   exit[i]       : True -> close any open position at this bar's close
   stop_dist[i]  : ATR-based stop distance to use if a position opens at bar i
 """
+
 from __future__ import annotations
 from typing import Dict, List
 
 from indicators import ema, rsi, atr
 
 DEFAULTS: Dict = dict(
-    ema_len=200,      # trend filter: longs only above it, shorts only below
+    ema_len=200,  # trend filter: longs only above it, shorts only below
     rsi_len=14,
-    oversold=30,      # long when RSI crosses up through this
-    overbought=70,    # short when RSI crosses down through this
-    exit_level=50,    # take profit when RSI reverts back through the midline
+    oversold=30,  # long when RSI crosses up through this
+    overbought=70,  # short when RSI crosses down through this
+    exit_level=50,  # take profit when RSI reverts back through the midline
     atr_len=14,
-    stop_atr=2.5,     # hard stop = stop_atr * ATR
+    stop_atr=2.5,  # hard stop = stop_atr * ATR
     allow_long=True,
     allow_short=True,
 )

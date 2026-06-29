@@ -9,6 +9,7 @@ Key rules:
   - If a position is open and the regime flips, the *current* strategy's
     exit rules finish the trade.  The new regime governs the next entry.
 """
+
 from __future__ import annotations
 from typing import Dict, List, Optional
 
@@ -39,8 +40,9 @@ DEFAULTS: Dict = dict(
 PARAM_GRID = {}
 
 
-def generate_signals(data: Dict, p: Dict,
-                     regime_predictions: Optional[List] = None) -> Dict[str, List]:
+def generate_signals(
+    data: Dict, p: Dict, regime_predictions: Optional[List] = None
+) -> Dict[str, List]:
     """Generate signals by delegating to sub-strategies based on regime.
 
     ``regime_predictions`` is a list of (prediction, confidence) tuples from
@@ -65,10 +67,14 @@ def generate_signals(data: Dict, p: Dict,
     crab_atr = atr(high, low, close, crab_p.get("atr_len", 14))
     crab_adx = adx(high, low, close, crab_p.get("adx_len", 14))
     bb_basis, bb_upper, bb_lower = bollinger_bands(
-        close, crab_p.get("bb_len", 20), crab_p.get("bb_mult", 2.0))
+        close, crab_p.get("bb_len", 20), crab_p.get("bb_mult", 2.0)
+    )
     macd_line, sig_line, hist = macd(
-        close, crab_p.get("macd_fast", 12), crab_p.get("macd_slow", 26),
-        crab_p.get("macd_sig", 9))
+        close,
+        crab_p.get("macd_fast", 12),
+        crab_p.get("macd_slow", 26),
+        crab_p.get("macd_sig", 9),
+    )
 
     if volume:
         vma = sma(volume, crab_p.get("vma_len", 20))
@@ -95,24 +101,35 @@ def generate_signals(data: Dict, p: Dict,
 
         if pred == 1:
             # === TREND REGIME ===
-            if (trend_ema[i] is None or trend_rsi[i] is None or
-                    trend_rsi[i - 1] is None or trend_atr[i] is None):
+            if (
+                trend_ema[i] is None
+                or trend_rsi[i] is None
+                or trend_rsi[i - 1] is None
+                or trend_atr[i] is None
+            ):
                 continue
             price = close[i]
 
             # Trend exit: RSI crosses the midline
             ex = trend_p["exit_level"]
-            if ((trend_rsi[i - 1] < ex <= trend_rsi[i]) or
-                    (trend_rsi[i - 1] > ex >= trend_rsi[i])):
+            if (trend_rsi[i - 1] < ex <= trend_rsi[i]) or (
+                trend_rsi[i - 1] > ex >= trend_rsi[i]
+            ):
                 exit_[i] = True
 
             # Trend entry
             up = price > trend_ema[i]
             dn = price < trend_ema[i]
-            long_c = (trend_p["allow_long"] and up and
-                      trend_rsi[i - 1] < trend_p["oversold"] <= trend_rsi[i])
-            short_c = (trend_p["allow_short"] and dn and
-                       trend_rsi[i - 1] > trend_p["overbought"] >= trend_rsi[i])
+            long_c = (
+                trend_p["allow_long"]
+                and up
+                and trend_rsi[i - 1] < trend_p["oversold"] <= trend_rsi[i]
+            )
+            short_c = (
+                trend_p["allow_short"]
+                and dn
+                and trend_rsi[i - 1] > trend_p["overbought"] >= trend_rsi[i]
+            )
             if long_c:
                 entry[i] = 1
                 stop_dist[i] = trend_atr[i] * trend_p["stop_atr"]
@@ -122,9 +139,14 @@ def generate_signals(data: Dict, p: Dict,
 
         else:
             # === CRAB REGIME ===
-            if (crab_atr[i] is None or crab_adx[i] is None or
-                    bb_upper[i] is None or hist[i] is None or
-                    hist[i - 1] is None or vma[i] is None):
+            if (
+                crab_atr[i] is None
+                or crab_adx[i] is None
+                or bb_upper[i] is None
+                or hist[i] is None
+                or hist[i - 1] is None
+                or vma[i] is None
+            ):
                 continue
 
             # Breakout protection still overrides even if AI says crab
