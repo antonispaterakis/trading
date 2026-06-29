@@ -17,20 +17,23 @@ forward-testing.
 ```
 trading/
 ├── python/
-│   ├── indicators.py      EMA, RSI, ATR, ADX, SMA, Bollinger Bands, MACD
-│   ├── data.py            fetch + cache real OHLCV from Binance (no API key)
-│   ├── strategy.py        baseline: trend-filtered mean reversion
-│   ├── crab_strategy.py   crab market day-trader scalper
-│   ├── backtest.py        event-driven engine + honest metrics
-│   ├── walkforward.py     walk-forward optimisation (the core idea)
-│   └── run.py             command-line entry point
+│   ├── indicators.py        EMA, RSI, ATR, ADX, SMA, Bollinger Bands, MACD
+│   ├── data.py              fetch + cache real OHLCV from Binance (no API key)
+│   ├── features.py          AI feature engineering + regime labels
+│   ├── ai_model.py          Random Forest regime classifier
+│   ├── strategy.py          baseline: trend-filtered mean reversion
+│   ├── crab_strategy.py     crab market day-trader scalper
+│   ├── hybrid_strategy.py   AI regime manager → delegates to sub-strategies
+│   ├── backtest.py          event-driven engine + honest metrics
+│   ├── walkforward.py       walk-forward optimisation (the core idea)
+│   └── run.py               command-line entry point
 ├── pinescript/
-│   └── mean_reversion.pine   no-repaint TradingView strategy
-├── progress.md            development log + thinking process
+│   └── mean_reversion.pine  no-repaint TradingView strategy
+├── progress.md              development log + thinking process
 └── README.md
 ```
 
-No `pip install` needed — it runs on a stock Python 3.
+The baseline strategies run on stock Python 3. The hybrid AI strategy requires `scikit-learn` (`pip install scikit-learn`).
 
 ## Quick start
 
@@ -42,6 +45,9 @@ python3 run.py --strategy baseline
 
 # Walk-forward validation with the crab market scalper:
 python3 run.py --strategy crab
+
+# Walk-forward validation with the hybrid AI regime manager:
+python3 run.py --strategy hybrid
 
 # Optimistic single-shot backtest (for contrast — do NOT trust it alone):
 python3 run.py --strategy baseline --mode backtest
@@ -68,6 +74,14 @@ python3 run.py --portfolio BTCUSDT,ETHUSDT,SOLUSDT
 - **Pause all trading** if ADX spikes (breakout protection).
 - Enter on Bollinger Band bounces confirmed by MACD momentum and Volume.
 - Use tight ATR-based stop-loss and take-profit for scalping-style execution.
+
+### Hybrid AI Regime Manager
+
+- A Random Forest classifier predicts the market **regime** (Trending vs Crab) using normalized features (RSI, ADX, BB width, MACD, Volume, ATR).
+- **If Trending** → activates the baseline trend-following strategy.
+- **If Crab** → activates the scalping strategy.
+- **If uncertain** (confidence < 60%) → sits out entirely.
+- The AI is retrained on every walk-forward segment, so it adapts as the market evolves.
 
 ## How to read the output
 

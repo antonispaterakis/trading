@@ -67,3 +67,83 @@ def walk_forward(data: Dict, base: Dict, generate_signals_fn, param_grid: Dict,
                              "test_range": (te_lo, te_hi), "metrics": m})
         start += test
     return segments
+
+
+def walk_forward_hybrid(data: Dict, base: Dict,
+                        train: int = 1500, test: int = 500,
+                        bars_per_year: float = 8760,
+                        horizon: int = 20,
+                        min_confidence: float = 0.60) -> List[Dict]:
+    """Walk-forward loop for the hybrid AI strategy.
+
+    Instead of optimising static parameters, each segment:
+      1. Extracts features + labels on the TRAIN window.
+      2. Trains a fresh Random Forest on that data.
+      3. Uses the trained model to predict regimes on the TEST window.
+      4. Generates hybrid signals and runs the backtest on the test window.
+    """
+    from features import extract_features, compute_labels, FEATURE_NAMES
+    from ai_model import train_model, predict_regime, log_importance
+    from hybrid_strategy import generate_signals as hybrid_gen
+    from hybrid_strategy import DEFAULTS as HYBRID_DEFAULTS
+
+    n = len(data["close"])
+    segments: List[Dict] = []
+    start = 0
+
+    # Pre-compute features and labels for the entire dataset
+    feat_rows, feat_valid = extract_features(data, base)
+    all_labels, label_valid = compute_labels(data, horizon)
+
+    while start + train + test <= n:
+        tr_lo, tr_hi = start, start + train
+        te_lo, te_hi = start + train, start + train + test
+
+        # Build training mask: feature must be valid AND label must be valid
+        # Labels near the end of the train window bleed into test → truncate
+        train_mask = []
+        for i in range(tr_lo, tr_hi):
+            valid = (feat_valid[i] and label_valid[i] and
+                     i + horizon < tr_hi)  # prevent label leakage
+            train_mask.append(valid)
+
+        train_features = feat_rows[tr_lo:tr_hi]
+        train_labels = all_labels[tr_lo:tr_hi]
+
+        # Train a fresh model on this segment
+        model = train_model(train_features, train_labels, train_mask)
+
+        # Predict regimes for the full dataset (we'll only use test range)
+        predictions = predict_regime(model, feat_rows)
+
+        # Generate hybrid signals using the AI predictions
+        p = dict(HYBRID_DEFAULTS)
+        p["min_confidence"] = min_confidence
+        sig = hybrid_gen(data, p, regime_predictions=predictions)
+
+        # Run backtest on the test window only
+        res = run(data, sig, p, te_lo, te_hi)
+        m = metrics(res, bars_per_year)
+
+        # Count regime distribution in test window
+        n_crab = sum(1 for i in range(te_lo, te_hi)
+                     if predictions[i][0] == 0 and predictions[i][1] >= min_confidence)
+        n_trend = sum(1 for i in range(te_lo, te_hi)
+                      if predictions[i][0] == 1 and predictions[i][1] >= min_confidence)
+        n_skip = sum(1 for i in range(te_lo, te_hi)
+                     if predictions[i][1] < min_confidence)
+
+        importance_str = log_importance(model, FEATURE_NAMES)
+
+        segments.append({
+            "params": p,
+            "train_range": (tr_lo, tr_hi),
+            "test_range": (te_lo, te_hi),
+            "metrics": m,
+            "regime_dist": {"crab": n_crab, "trend": n_trend, "skipped": n_skip},
+            "feature_importance": importance_str,
+        })
+        start += test
+
+    return segments
+
