@@ -42,7 +42,20 @@ def base_params(risk, defaults):
 
 
 def run_one(symbol, interval, bars, risk, mode, strategy_name):
-    data = fetch_klines(symbol, interval, bars)
+    data = fetch_klines(symbol, interval, bars, market_type="futures")
+
+    # Fetch and align alternative data
+    import alt_data
+
+    fr = alt_data.fetch_funding_rate(symbol, limit=bars)
+    data["funding_rate"] = alt_data.align_alt_data(data, fr, "funding_rate")
+
+    oi = alt_data.fetch_open_interest_hist(symbol, period=interval, limit=bars)
+    data["oi_value"] = alt_data.align_alt_data(data, oi, "oi_value")
+
+    ls = alt_data.fetch_long_short_ratio(symbol, period=interval, limit=bars)
+    data["ls_ratio"] = alt_data.align_alt_data(data, ls, "ls_ratio")
+
     bpy = BARS_PER_YEAR.get(interval, 8760)
     print(
         f"\n=== {symbol} {interval}  ({len(data['close'])} bars)  [{strategy_name.upper()} STRATEGY] ==="
@@ -128,9 +141,11 @@ def run_one(symbol, interval, bars, risk, mode, strategy_name):
         )
         return agg
 
-    # ---- BASELINE / CRAB STRATEGY ----
+    # ---- BASELINE / CRAB / BREAKOUT STRATEGY ----
     if strategy_name == "baseline":
         mod = importlib.import_module("strategy")
+    elif strategy_name == "breakout":
+        mod = importlib.import_module("breakout_strategy")
     else:
         mod = importlib.import_module("crab_strategy")
 
@@ -197,8 +212,8 @@ def main():
         description="Honest, walk-forward-validated trading backtester."
     )
     ap.add_argument("--symbol", default="BTCUSDT")
-    ap.add_argument("--interval", default="1h")
-    ap.add_argument("--bars", type=int, default=4800)
+    ap.add_argument("--interval", default="15m")
+    ap.add_argument("--bars", type=int, default=2800)
     ap.add_argument(
         "--risk", type=float, default=1.0, help="percent of equity risked per trade"
     )
@@ -206,7 +221,9 @@ def main():
         "--mode", choices=["backtest", "walkforward"], default="walkforward"
     )
     ap.add_argument(
-        "--strategy", choices=["baseline", "crab", "hybrid"], default="hybrid"
+        "--strategy",
+        choices=["baseline", "crab", "hybrid", "breakout"],
+        default="hybrid",
     )
     ap.add_argument(
         "--portfolio", default="", help="comma-separated symbols for a diversified run"

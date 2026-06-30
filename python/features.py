@@ -23,6 +23,14 @@ FEATURE_NAMES = [
     "bb_width_pct",  # (upper - lower) / basis  (% bandwidth)
     "volume_ratio",  # volume / volume_ma
     "atr_pct",  # ATR / close  (normalised volatility)
+    "rsi_slope",  # RSI(i) - RSI(i-5)
+    "atr_pct_slope",  # ATR_PCT(i) - ATR_PCT(i-5)
+    "funding_rate",
+    "ls_ratio",
+    "oi_change_pct",  # (OI(i) - OI(i-5)) / OI(i-5)
+    "oi_change_pct_12",  # OI momentum over 12 bars
+    "ma_100_dist",  # close / sma(100) - 1
+    "ma_200_dist",  # close / sma(200) - 1
 ]
 
 
@@ -34,7 +42,12 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
     """
     close, high, low = data["close"], data["high"], data["low"]
     volume = data.get("volume", [])
+
+    # Alt data arrays (default to zeros if missing)
     n = len(close)
+    funding_rate = data.get("funding_rate", [0.0] * n)
+    ls_ratio = data.get("ls_ratio", [1.0] * n)
+    oi_value = data.get("oi_value", [0.0] * n)
 
     # -- compute raw indicators --
     r = rsi(close, p.get("rsi_len", 14))
@@ -52,20 +65,31 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
         vma = [None] * n
         volume = [None] * n
 
+    sma100 = sma(close, 100)
+    sma200 = sma(close, 200)
+
     # -- build feature matrix --
     rows: List[List[float]] = []
     valid: List[bool] = []
 
+    slope_len = 5  # Used for temporal context (e.g. 5 bars ago)
+    slope_len_long = 12  # Used for longer temporal context
+
     for i in range(n):
         # Check all indicators have warmed up
         if (
-            r[i] is None
+            i < max(slope_len_long, 200)
+            or r[i] is None
             or a[i] is None
             or atr_vals[i] is None
             or hist[i] is None
             or bb_basis[i] is None
             or bb_upper[i] is None
             or bb_lower[i] is None
+            or r[i - slope_len] is None
+            or atr_vals[i - slope_len] is None
+            or sma100[i] is None
+            or sma200[i] is None
         ):
             rows.append([0.0] * len(FEATURE_NAMES))
             valid.append(False)
@@ -96,7 +120,66 @@ def extract_features(data: Dict, p: Dict) -> Tuple[List[List[float]], List[bool]
         # ATR as percentage of close (normalised volatility)
         feat_atr_pct = atr_vals[i] / close[i] * 100.0 if close[i] > 0 else 0.0
 
-        rows.append([feat_rsi, feat_adx, feat_macd, feat_bb, feat_vol, feat_atr_pct])
+        # Temporal context: Slopes
+        feat_rsi_slope = r[i] - r[i - slope_len]
+
+        prev_atr_pct = (
+            atr_vals[i - slope_len] / close[i - slope_len] * 100.0
+            if close[i - slope_len] > 0
+            else 0.0
+        )
+        feat_atr_pct_slope = feat_atr_pct - prev_atr_pct
+
+        # Alt Data
+        feat_funding = funding_rate[i]
+        feat_ls = ls_ratio[i]
+
+        # OI Change Pct over 5 bars
+        if oi_value[i - slope_len] > 0:
+            feat_oi_change = (
+                (oi_value[i] - oi_value[i - slope_len])
+                / oi_value[i - slope_len]
+                * 100.0
+            )
+        else:
+            feat_oi_change = 0.0
+
+        # OI Change Pct over 12 bars (3 hours)
+        if oi_value[i - slope_len_long] > 0:
+            feat_oi_change_12 = (
+                (oi_value[i] - oi_value[i - slope_len_long])
+                / oi_value[i - slope_len_long]
+                * 100.0
+            )
+        else:
+            feat_oi_change_12 = 0.0
+
+        # Macro distance
+        feat_ma_100_dist = (
+            (close[i] / sma100[i] - 1.0) * 100.0 if sma100[i] > 0 else 0.0
+        )
+        feat_ma_200_dist = (
+            (close[i] / sma200[i] - 1.0) * 100.0 if sma200[i] > 0 else 0.0
+        )
+
+        rows.append(
+            [
+                feat_rsi,
+                feat_adx,
+                feat_macd,
+                feat_bb,
+                feat_vol,
+                feat_atr_pct,
+                feat_rsi_slope,
+                feat_atr_pct_slope,
+                feat_funding,
+                feat_ls,
+                feat_oi_change,
+                feat_oi_change_12,
+                feat_ma_100_dist,
+                feat_ma_200_dist,
+            ]
+        )
         valid.append(True)
 
     return rows, valid

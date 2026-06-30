@@ -61,8 +61,8 @@ def walk_forward(
     base: Dict,
     generate_signals_fn,
     param_grid: Dict,
-    train: int = 1500,
-    test: int = 500,
+    train: int = 1000,
+    test: int = 300,
     bars_per_year: float = 8760,
     objective: str = "sharpe",
 ) -> List[Dict]:
@@ -102,10 +102,10 @@ def walk_forward(
 def walk_forward_hybrid(
     data: Dict,
     base: Dict,
-    train: int = 1500,
-    test: int = 500,
-    bars_per_year: float = 8760,
-    horizon: int = 20,
+    train: int = 1000,
+    test: int = 300,
+    bars_per_year: float = 35040,  # 15m
+    horizon: int = 8,
     min_confidence: float = 0.60,
 ) -> List[Dict]:
     """Walk-forward loop for the hybrid AI strategy.

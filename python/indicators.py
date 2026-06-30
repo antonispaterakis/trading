@@ -179,3 +179,24 @@ def macd(
             hist_line[i] = macd_line[i] - sig_line[i]
 
     return macd_line, sig_line, hist_line
+
+
+def donchian_channel(
+    high: List[float], low: List[float], length: int
+) -> tuple[Series, Series]:
+    n = len(high)
+    upper: Series = [None] * n
+    lower: Series = [None] * n
+
+    if n < length:
+        return upper, lower
+
+    for i in range(length - 1, n):
+        # The breakout uses the high of the PREVIOUS n bars.
+        # But commonly Donchian channel is defined over the last n bars.
+        # We will compute it over the last n bars. The breakout strategy
+        # can check if price > previous upper channel.
+        upper[i] = max(high[i - length + 1 : i + 1])
+        lower[i] = min(low[i - length + 1 : i + 1])
+
+    return upper, lower

@@ -32,7 +32,7 @@ DEFAULTS: Dict = dict(
     vma_len=20,
     # AI params
     min_confidence=0.60,
-    horizon=20,
+    horizon=8,
     # Sub-strategy params are pulled from their respective DEFAULTS
 )
 

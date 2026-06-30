@@ -25,9 +25,12 @@ def fetch_klines(
     interval: str = "1h",
     bars: int = 4800,
     use_cache: bool = True,
+    market_type: str = "futures",
 ) -> dict:
     os.makedirs(CACHE_DIR, exist_ok=True)
-    cache_path = os.path.join(CACHE_DIR, f"{symbol}_{interval}_{bars}.json")
+    cache_path = os.path.join(
+        CACHE_DIR, f"{symbol}_{interval}_{bars}_{market_type}.json"
+    )
     if (
         use_cache
         and os.path.exists(cache_path)
@@ -37,9 +40,16 @@ def fetch_klines(
 
     collected: dict[int, list] = {}
     end = int(time.time() * 1000)
+
+    base_url = (
+        "https://fapi.binance.com/fapi/v1"
+        if market_type == "futures"
+        else "https://api.binance.com/api/v3"
+    )
+
     while len(collected) < bars:
         url = (
-            f"https://api.binance.com/api/v3/klines?symbol={symbol}"
+            f"{base_url}/klines?symbol={symbol}"
             f"&interval={interval}&limit=1000&endTime={end}"
         )
         data = _get(url)
